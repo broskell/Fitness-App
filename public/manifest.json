@@ -1,6 +1,9 @@
 {
   "short_name": "FlexFit",
   "name": "FlexFit | Premium Technical Fitness Companion",
+  "description": "FlexFit is a modern, responsive personal fitness companion featuring custom routine builders, live timers, calorie and macro budgets, water logs, and performance analytics.",
+  "id": "/",
+  "categories": ["sports", "health", "lifestyle"],
   "icons": [
     {
       "src": "/icon-192.png",
