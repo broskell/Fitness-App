@@ -333,6 +333,8 @@ export default function App() {
     };
   }, []);
 
+  const [showAddExActiveModal, setShowAddExActiveModal] = useState(false);
+
   // ==========================================
   // SCREEN 1: AUTHENTICATION (MOCK SCREEN)
   // ==========================================
@@ -886,7 +888,6 @@ export default function App() {
 
   const RenderWorkoutTab = () => {
     // If Active Workout modal is shown, overlay it or display directly
-    const [showAddExActiveModal, setShowAddExActiveModal] = useState(false);
 
     if (activeWorkout) {
       return (
@@ -1674,65 +1675,63 @@ export default function App() {
     return count;
   }, [workoutHistory]);
 
-  const RenderAnalyticsTab = () => {
-    // Generate SVG Weight Path
-    // Map array to SVG coordinates
-    // Width 340, Height 140
-    const chartW = 340;
-    const chartH = 120;
-    const padding = 15;
+  // Weight progression graph constants & calculations for analytics
+  const chartW = 340;
+  const chartH = 120;
+  const padding = 15;
+
+  const svgWeightLogs = useMemo(() => {
+    // get last 7 weight entries
+    return [...weightLogs]
+      .sort((a,b) => a.date.localeCompare(b.date))
+      .slice(-7);
+  }, [weightLogs]);
+
+  const weightGraphPath = useMemo(() => {
+    if (svgWeightLogs.length < 2) return '';
     
-    const svgWeightLogs = useMemo(() => {
-      // get last 7 weight entries
-      return [...weightLogs]
-        .sort((a,b) => a.date.localeCompare(b.date))
-        .slice(-7);
-    }, [weightLogs]);
+    const weights = svgWeightLogs.map(l => l.weight);
+    const minW = Math.min(...weights) - 2;
+    const maxW = Math.max(...weights) + 2;
+    const spread = maxW - minW || 1;
+    
+    const points = svgWeightLogs.map((log, index) => {
+      const x = padding + (index / (svgWeightLogs.length - 1)) * (chartW - padding * 2);
+      const y = chartH - padding - ((log.weight - minW) / spread) * (chartH - padding * 2);
+      return { x, y };
+    });
 
-    const weightGraphPath = useMemo(() => {
-      if (svgWeightLogs.length < 2) return '';
-      
-      const weights = svgWeightLogs.map(l => l.weight);
-      const minW = Math.min(...weights) - 2;
-      const maxW = Math.max(...weights) + 2;
-      const spread = maxW - minW || 1;
-      
-      const points = svgWeightLogs.map((log, index) => {
-        const x = padding + (index / (svgWeightLogs.length - 1)) * (chartW - padding * 2);
-        const y = chartH - padding - ((log.weight - minW) / spread) * (chartH - padding * 2);
-        return { x, y };
-      });
+    // Build Bezier Curve
+    let path = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      const cpX = points[i - 1].x + (points[i].x - points[i - 1].x) / 2;
+      path += ` C ${cpX} ${points[i - 1].y}, ${cpX} ${points[i].y}, ${points[i].x} ${points[i].y}`;
+    }
+    return path;
+  }, [svgWeightLogs]);
 
-      // Build Bezier Curve
-      let path = `M ${points[0].x} ${points[0].y}`;
-      for (let i = 1; i < points.length; i++) {
-        const cpX = points[i - 1].x + (points[i].x - points[i - 1].x) / 2;
-        path += ` C ${cpX} ${points[i - 1].y}, ${cpX} ${points[i].y}, ${points[i].x} ${points[i].y}`;
-      }
-      return path;
-    }, [svgWeightLogs]);
+  const weightFillPath = useMemo(() => {
+    if (!weightGraphPath || svgWeightLogs.length < 2) return '';
+    
+    const firstX = padding;
+    const lastX = chartW - padding;
+    const baseY = chartH;
+    
+    return `${weightGraphPath} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
+  }, [weightGraphPath, svgWeightLogs]);
 
-    const weightFillPath = useMemo(() => {
-      if (!weightGraphPath || svgWeightLogs.length < 2) return '';
-      
-      const firstX = padding;
-      const lastX = chartW - padding;
-      const baseY = chartH;
-      
-      return `${weightGraphPath} L ${lastX} ${baseY} L ${firstX} ${baseY} Z`;
-    }, [weightGraphPath, svgWeightLogs]);
+  // Volume Chart SVG
+  // Max volume in history
+  const historyLast5 = useMemo(() => {
+    return [...workoutHistory].slice(-5).reverse();
+  }, [workoutHistory]);
 
-    // Volume Chart SVG
-    // Max volume in history
-    const historyLast5 = useMemo(() => {
-      return [...workoutHistory].slice(-5).reverse();
-    }, [workoutHistory]);
+  const maxVolume = useMemo(() => {
+    if (historyLast5.length === 0) return 1000;
+    return Math.max(...historyLast5.map(h => h.totalVolume), 1000);
+  }, [historyLast5]);
 
-    const maxVolume = useMemo(() => {
-      if (historyLast5.length === 0) return 1000;
-      return Math.max(...historyLast5.map(h => h.totalVolume), 1000);
-    }, [historyLast5]);
-
+  const RenderAnalyticsTab = () => {
     return (
       <div className="animated-fade">
         <span className="badge badge-purple" style={{ marginBottom: '4px' }}>Track Progress</span>
@@ -2026,16 +2025,16 @@ export default function App() {
       )}
 
       {/* Screen Router */}
-      {activeScreen === 'auth' && <RenderAuthScreen />}
-      {activeScreen === 'onboarding' && <RenderOnboardingScreen />}
+      {activeScreen === 'auth' && RenderAuthScreen()}
+      {activeScreen === 'onboarding' && RenderOnboardingScreen()}
       
       {activeScreen === 'app' && (
         <>
           <div className="app-content" style={{ paddingTop: activeWorkout && currentTab !== 'workout' ? '44px' : '24px' }}>
-            {currentTab === 'workout' && <RenderWorkoutTab />}
-            {currentTab === 'nutrition' && <RenderNutritionTab />}
-            {currentTab === 'analytics' && <RenderAnalyticsTab />}
-            {currentTab === 'profile' && <RenderProfileTab />}
+            {currentTab === 'workout' && RenderWorkoutTab()}
+            {currentTab === 'nutrition' && RenderNutritionTab()}
+            {currentTab === 'analytics' && RenderAnalyticsTab()}
+            {currentTab === 'profile' && RenderProfileTab()}
           </div>
 
           {/* Bottom Navigation Menu */}
